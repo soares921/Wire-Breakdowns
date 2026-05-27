@@ -51,14 +51,34 @@ TEAM_CC = 'david.campbell@simplicitygroup.com, gabrielle.williams@simplicitygrou
 # select file
 root = Tk()
 root.withdraw()
-file_path = filedialog.askopenfilename(title=f"Select Invoice for {org_name}")
+file_path = filedialog.askopenfilename(title=f"Select invoice for {org_name}")
 
 if not file_path:
     print("No invoice selected. Exiting...")
     exit()
 
+loan_path = filedialog.askopenfilename(title="Select loan workbook")
+
+if not loan_path:
+    print("No loan workbook selected. Exiting...")
+    exit()
+
+# load sheets from loan workbook and extract policy numbers
+loan_excel = pd.ExcelFile(loan_path)
+sheet_names = loan_excel.sheet_names
+
+loan_policies = set()
+for sheet in sheet_names[:2]:
+    loan_df = pd.read_excel(loan_path, sheet_name=sheet)
+    # grabs policies with loans and matches accordingly with payment type
+    if 'Policy Number' in loan_df.columns:
+        policies= loan_df['Policy Number'].dropna().astype(str).str.strip().tolist()
+        loan_policies.update(policies)
+
 # process excel
 df = pd.read_excel(file_path, sheet_name='Wire_Breakdown_Export')
+df['Policy Number'] = df['Policy Number'].astype(str).str.strip()
+df['Payment Type'] = df['Policy Number'].apply(lambda x: 'Loan Repayment' if x in loan_policies else 'Premium')
 carriers = df['Carrier'].unique()
 
 for carrier in carriers:
@@ -77,7 +97,7 @@ for carrier in carriers:
     summary_row = pd.DataFrame([{'Policy Owner': 'TOTAL', 'Amount': total_amount}])
     
     # create carrier specific breakdown file
-    columns_to_export = ['Policy Owner', 'Carrier', 'Policy Number', 'Amount']
+    columns_to_export = ['Policy Owner', 'Carrier', 'Policy Number', 'Payment Type', 'Amount']
     export_df = pd.concat([carrier_data[columns_to_export], summary_row], ignore_index=True)
     
     # 3. write basic data to Excel
@@ -89,21 +109,20 @@ for carrier in carriers:
     # finds exactly where last row is
     total_row_idx = ws.max_row
     
-    # define bold font
+    # define bold font & accounting style underline border
     bold_font = Font(name='Calibri', size=11, bold=True)
     
-    # define accounting style underline border
     accounting_border = Border(
         top=Side(style='double'),
-        bottom=Side(style='double')
+        bottom=Side(style='thin')
     )
     
     # formatter configuration for Column D (amount)
     for row in range(2, total_row_idx):
-        ws[f'D{row}'].number_format = '$#,##0.00'
+        ws[f'E{row}'].number_format = '$#,##0.00'
 
     # styles cell D (last row) to be bold and underlined
-    total_amount_cell = ws[f'D{total_row_idx}']
+    total_amount_cell = ws[f'E{total_row_idx}']
     total_amount_cell.font = bold_font
     total_amount_cell.border = accounting_border
     total_amount_cell.number_format = '$#,##0.00'
