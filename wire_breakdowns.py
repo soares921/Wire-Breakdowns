@@ -15,7 +15,7 @@ from openpyxl import load_workbook
 from openpyxl.styles import Font, Border, Side
 
 # define security permissions needed to make drafts
-SCOPES = ['https://www.googleapis.com/auth/gmail.compose']
+SCOPES = ['https://www.googleapis.com/auth/gmail.compose', 'https://www.googleapis.com/auth/gmail.readonly']
 
 # paths and authentication
 script_dir = os.path.dirname(os.path.abspath(__file__))
@@ -41,12 +41,36 @@ if not creds or not creds.valid:
 # build official gmail service
 gmail_service = build('gmail', 'v1', credentials=creds)
 
+# grab email of current user
+user_profile = gmail_service.users().getProfile(userId='me').execute()
+user_email = user_profile.get('emailAddress', '').lower().strip()
+
+# admin team emails
+MARCOS_EMAIL = 'marcos.soares@simplicitygroup.com'
+DAVID_EMAIL = 'david.campbell@simplicitygroup.com'
+GABRIELLE_EMAIL = 'gabrielle.williams@simplicitygroup.com'
+
+# Dynamically construct the CC list so users don't CC themselves
+cc_set = set()
+
+if user_email == MARCOS_EMAIL:
+    cc_set.update([DAVID_EMAIL, GABRIELLE_EMAIL])
+elif user_email == GABRIELLE_EMAIL:
+    cc_set.update([DAVID_EMAIL, MARCOS_EMAIL])
+elif user_email == DAVID_EMAIL:
+    cc_set.update([GABRIELLE_EMAIL, MARCOS_EMAIL])
+else:
+    # Fallback default if another coworker runs it down the line
+    cc_set.update([DAVID_EMAIL, GABRIELLE_EMAIL, MARCOS_EMAIL])
+
+# convert emails into a clean comma separated string for email header
+TEAM_CC = ", ".join(cc_set)
+
 # user inputs
 org_name = input("Enter the Organization: ")
 process_date = input("Enter the Date (MMDDYYYY): ")
 
 formatted_date = f"{process_date[0:2]}/{process_date[2:4]}/{process_date[4:8]}"
-TEAM_CC = 'david.campbell@simplicitygroup.com, gabrielle.williams@simplicitygroup.com'
 
 # select file
 root = Tk()
