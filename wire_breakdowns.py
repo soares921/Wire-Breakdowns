@@ -60,7 +60,7 @@ elif user_email == GABRIELLE_EMAIL:
 elif user_email == DAVID_EMAIL:
     cc_set.update([GABRIELLE_EMAIL, MARCOS_EMAIL])
 else:
-    # Fallback default if another coworker runs it down the line
+    # fallback default if another coworker runs script
     cc_set.update([DAVID_EMAIL, GABRIELLE_EMAIL, MARCOS_EMAIL])
 
 # convert emails into a clean comma separated string for email header
@@ -100,7 +100,9 @@ for sheet in sheet_names[:2]:
         loan_policies.update(policies)
 
 # process excel
-df = pd.read_excel(file_path, sheet_name='Wire_Breakdown_Export')
+df = pd.read_excel(file_path, sheet_name='Policy Recon', usecols= "A:G")
+df.columns = df.columns.str.strip()
+df = df.dropna(subset=['Carrier', 'Total Cont'])
 df['Policy Number'] = df['Policy Number'].astype(str).str.strip()
 df['Payment Type'] = df['Policy Number'].apply(lambda x: 'Loan Repayment' if x in loan_policies else 'Premium')
 carriers = df['Carrier'].unique()
@@ -109,7 +111,7 @@ for carrier in carriers:
     carrier_data = df[df['Carrier'] == carrier].copy()
     
     # calculate total on wire breakdown
-    total_amount = carrier_data['Amount'].sum()
+    total_amount = carrier_data['Total Cont'].sum()
     formatted_total = f"${total_amount:,.2f}"
     
     recipient_email = carrier_data['Carrier Email'].iloc[0]
@@ -119,7 +121,10 @@ for carrier in carriers:
 
     # create row to hold sum text and raw sum
     summary_row = pd.DataFrame([{'Policy Owner': 'TOTAL', 'Amount': total_amount}])
-    
+
+    carrier_data = carrier_data.rename(columns={'Total Cont': 'Amount'})
+    carrier_data = carrier_data.rename(columns={'Participant': 'Policy Owner'})
+
     # create carrier specific breakdown file
     columns_to_export = ['Policy Owner', 'Carrier', 'Policy Number', 'Payment Type', 'Amount']
     export_df = pd.concat([carrier_data[columns_to_export], summary_row], ignore_index=True)
