@@ -1,0 +1,9 @@
+# Sensitive Google API credentials
+credentials.json
+token.json
+
+# Temporary Excel files if the script crashes mid-run
+*.xlsx
+
+# Python cache data
+__pycache__/
