@@ -1,0 +1,17 @@
+# environment secrets (Usernames & Passwords)
+.env
+
+# local excel tracking lists
+*.xlsx
+*.xls
+
+# temporary python files
+__pycache__/
+*.pyc
+
+# virtual environment
+venv/
+.venv/
+
+# PDF files downloaded locally
+*.pdf
