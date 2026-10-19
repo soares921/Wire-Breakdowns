@@ -294,6 +294,19 @@ if st.button("Process Invoice & Queue Gmail Drafts", type="primary"):
             st.error(f"Missing required mapped fields: {missing}. Please adjust the column selectors above.")
             st.stop()
 
+        df['Total Cont'] = (
+        df['Total Cont']
+        .astype(str)
+        .str.replace('$', '', regex=False)
+        .str.replace(',', '', regex=False)
+        .str.replace('-', '', regex=False)
+        .str.strip()
+        )
+        df['Total Cont'] = pd.to_numeric(df['Total Cont'], errors='coerce').fillna(0.0)
+
+        df = df.dropna(subset=['Carrier'])
+        df['Policy Number'] = df['Policy Number'].astype(str).str.strip()
+
         df = df.dropna(subset=['Carrier', 'Total Cont'])
         df['Policy Number'] = df['Policy Number'].astype(str).str.strip()
 
