@@ -160,7 +160,7 @@ if uploaded_file is not None:
     col_mapping = {}
     col_cols = st.columns(4)
     
-    target_fields = ['Policy Number', 'Carrier', 'Total Cont']
+    target_fields = ['Policy Number', 'Carrier', 'Total Contribution']
     
     for idx, field in enumerate(target_fields):
         guessed_col = None
@@ -340,7 +340,10 @@ if st.button("Process Invoice & Queue Gmail Drafts", type="primary"):
 
             # pull directly from google sheet email directory
             recipient_email = directory_info.get('email', '')
-            team_cc = directory_info.get('cc', '')
+            raw_cc = directory_info.get('cc', '')
+            cc_list = [addr.strip() for addr in raw_cc.replace(';', ',').split(',') if addr.strip()]
+            filtered_cc_list = [addr for addr in cc_list if addr.lower() != user_email]
+            team_cc = ", ".join(filtered_cc_list)
 
             if "@" not in recipient_email or "." not in recipient_email:
                 st.warning(f"Skipped draft for **{carrier}**: No valid email found in uploaded sheet or Google Directory.")
