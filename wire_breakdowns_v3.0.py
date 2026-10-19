@@ -160,7 +160,7 @@ if uploaded_file is not None:
     col_mapping = {}
     col_cols = st.columns(4)
     
-    target_fields = ['Policy Number', 'Carrier', 'Total Contribution']
+    target_fields = ['Policy Number', 'Carrier', 'Total Cont']
     
     for idx, field in enumerate(target_fields):
         guessed_col = None
