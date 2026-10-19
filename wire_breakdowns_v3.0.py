@@ -160,7 +160,7 @@ if uploaded_file is not None:
     col_mapping = {}
     col_cols = st.columns(4)
     
-    target_fields = ['Policy Number', 'Carrier', 'Total Cont', 'Carrier Email']
+    target_fields = ['Policy Number', 'Carrier', 'Total Cont']
     
     for idx, field in enumerate(target_fields):
         guessed_col = None
@@ -176,6 +176,33 @@ if uploaded_file is not None:
             chosen = st.selectbox(f"Field: **{field}**", options, index=selected_index)
             if chosen != "-- Select Column --":
                 col_mapping[chosen] = field
+
+def find_carrier_contact(carrier_name, directory):
+    
+    # helper function that looks up contact info for a carrier using exact matching first, then falls back to substring matching
+    clean_name = str(carrier_name).strip().lower()
+    
+    if clean_name in directory:
+        return directory[clean_name]
+    
+    for dir_carrier, contact_info in directory.items():
+        if dir_carrier in clean_name or clean_name in dir_carrier:
+            return contact_info
+            
+    # strip common suffix words as a final fallback
+    suffixes = [' life', ' insurance', ' co', ' company', ' group', ' (lsw)', ' financial']
+    stripped_name = clean_name
+    for suffix in suffixes:
+        stripped_name = stripped_name.replace(suffix, '').strip()
+        
+    for dir_carrier, contact_info in directory.items():
+        dir_clean = dir_carrier
+        for suffix in suffixes:
+            dir_clean = dir_clean.replace(suffix, '').strip()
+        if dir_clean and (dir_clean in stripped_name or stripped_name in dir_clean):
+            return contact_info
+            
+    return {}
 
 st.divider()
 
@@ -296,13 +323,10 @@ if st.button("Process Invoice & Queue Gmail Drafts", type="primary"):
 
             # determine recipient & cc emails (fallback to google sheet directory)
             carrier_key = str(carrier).strip().lower()
-            directory_info = email_directory.get(carrier_key, {})
+            directory_info = find_carrier_contact(carrier, email_directory)
 
-            if 'Carrier Email' in carrier_data.columns and pd.notna(carrier_data['Carrier Email'].iloc[0]):
-                recipient_email = str(carrier_data['Carrier Email'].iloc[0]).strip()
-            else:
-                recipient_email = directory_info.get('email', '')
-
+            # pull directly from google sheet email directory
+            recipient_email = directory_info.get('email', '')
             team_cc = directory_info.get('cc', '')
 
             if "@" not in recipient_email or "." not in recipient_email:
@@ -364,7 +388,16 @@ if st.button("Process Invoice & Queue Gmail Drafts", type="primary"):
                 col_letter = col[0].column_letter
                 for cell in col:
                     if cell.value is not None:
-                        cell_len = len(f"${cell.value:,.2f}") if isinstance(cell.value, (int, float)) else len(str(cell.value))
+                        val = cell.value
+                        if isinstance(val, (int, float)):
+                            cell_len = len(f"${val:,.2f}")
+                        else:
+                            try:
+                                # string-to-float conversion if formatted as text
+                                num_val = float(str(val).replace('$', '').replace(',', '').strip())
+                                cell_len = len(f"${num_val:,.2f}")
+                            except ValueError:
+                                cell_len = len(str(val))
                         if cell_len > max_len:
                             max_len = cell_len
                 ws.column_dimensions[col_letter].width = max(max_len + 4, 12)
