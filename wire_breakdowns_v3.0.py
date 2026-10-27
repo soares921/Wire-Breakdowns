@@ -21,11 +21,12 @@ st.caption("Version 3.0: Cloud Edition")
 ### CONSTANTS & CONFIGURATIONS
 SCOPES = [
     'https://www.googleapis.com/auth/gmail.compose', 
-    'https://www.googleapis.com/auth/gmail.readonly', 
+    'https://www.googleapis.com/auth/userinfo.email',
+    'openid', 
     'https://www.googleapis.com/auth/spreadsheets.readonly'
 ]
 
-LOAN_SPREADSHEET_ID = "1DNaUyxTbtLCaTNSb2Az4TnmeSlw_JMrmpSGKrCPcyoY"
+LOAN_SPREADSHEET_ID = "1P-3ksqBx7IA8lGM2vZfl9I64qT9TzWsi"
 
 
 DEFAULT_COLUMN_ALIASES = {
@@ -234,15 +235,15 @@ if st.button("Process Invoice & Queue Gmail Drafts", type="primary"):
         sheets_service = get_shared_sheets_service()
         
         # get current authenticated user email
-        user_profile = gmail_service.users().getProfile(userId='me').execute()
-        user_email = user_profile.get('emailAddress', '').lower().strip()
-        status_box.write(f"Logged in as: **{user_email}**")
+        user_profile = build('oauth2', 'v2', credentials=get_user_credentials())
+        user_info = user_profile.userinfo().get().execute()
+        user_email = user_info.get('email', '').lower().strip() 
 
 
         ### FETCH ACTIVE LOANS & EMAIL DIRECTORY FROM GOOGLE SHEETS
         status_box.write("Syncing loan tracking & email directory from Google Sheets...")
-        
-        # 1. fetch active loan policies
+
+        # fetch active loan policies
         loans_result = sheets_service.spreadsheets().values().get(
             spreadsheetId=LOAN_SPREADSHEET_ID,
             range="'Active Loan Tracking'!A:Z"
@@ -250,12 +251,34 @@ if st.button("Process Invoice & Queue Gmail Drafts", type="primary"):
         
         loan_rows = loans_result.get('values', [])
         loan_policies = set()
+        
         if loan_rows:
             headers = [str(c).strip() for c in loan_rows[0]]
+            
+            # locate "Policy Number" (or "Policy Numbers") column
+            p_idx = None
             if 'Policy Number' in headers:
                 p_idx = headers.index('Policy Number')
-                loan_policies = set(str(r[p_idx]).strip() for r in loan_rows[1:] if len(r) > p_idx and r[p_idx])
-        
+            elif 'Policy Numbers' in headers:
+                p_idx = headers.index('Policy Numbers')
+                
+            # locate "Paid In Full Date" column
+            paid_idx = headers.index('Paid In Full Date') if 'Paid In Full Date' in headers else None
+
+            if p_idx is not None:
+                for r in loan_rows[1:]:
+                    # extract policy number
+                    policy_num = str(r[p_idx]).strip() if len(r) > p_idx and r[p_idx] is not None else ''
+                    
+                    # check 'Paid In Full Date' status
+                    paid_in_full_val = str(r[paid_idx]).strip() if (paid_idx is not None and len(r) > paid_idx and r[paid_idx] is not None) else ''
+                    
+                    # only treat as active loan repayment if policy exists AND 'Paid In Full Date' is blank
+                    if policy_num and not paid_in_full_val:
+                        loan_policies.add(policy_num)
+            else:
+                st.warning("Could not find 'Policy Numbers' column in 'Active Loan Tracking' tab.")
+
         status_box.write(f"Loaded **{len(loan_policies)}** active loan policies.")
 
         # 2. fetch email directory tab
