@@ -243,7 +243,7 @@ if st.button("Process Invoice & Queue Gmail Drafts", type="primary"):
         ### FETCH ACTIVE LOANS & EMAIL DIRECTORY FROM GOOGLE SHEETS
         status_box.write("Syncing loan tracking & email directory from Google Sheets...")
 
-        # fetch active loan policies
+        # fetch active loan policies (where 'Loan Status' is 'Outstanding')
         loans_result = sheets_service.spreadsheets().values().get(
             spreadsheetId=LOAN_SPREADSHEET_ID,
             range="'Active Loan Tracking'!A:Z"
@@ -262,22 +262,22 @@ if st.button("Process Invoice & Queue Gmail Drafts", type="primary"):
             elif 'Policy Numbers' in headers:
                 p_idx = headers.index('Policy Numbers')
                 
-            # locate "Paid In Full Date" column
-            paid_idx = headers.index('Paid In Full Date') if 'Paid In Full Date' in headers else None
+            # locate "Loan Status" column
+            status_idx = headers.index('Loan Status') if 'Loan Status' in headers else None
 
-            if p_idx is not None:
+            if p_idx is not None and status_idx is not None:
                 for r in loan_rows[1:]:
-                    # extract policy number
                     policy_num = str(r[p_idx]).strip() if len(r) > p_idx and r[p_idx] is not None else ''
+                    loan_status = str(r[status_idx]).strip().lower() if len(r) > status_idx and r[status_idx] is not None else ''
                     
-                    # check 'Paid In Full Date' status
-                    paid_in_full_val = str(r[paid_idx]).strip() if (paid_idx is not None and len(r) > paid_idx and r[paid_idx] is not None) else ''
-                    
-                    # only treat as active loan repayment if policy exists AND 'Paid In Full Date' is blank
-                    if policy_num and not paid_in_full_val:
+                    # only treat as loan repayment if status is explicitly "outstanding"
+                    if policy_num and loan_status == 'outstanding':
                         loan_policies.add(policy_num)
             else:
-                st.warning("Could not find 'Policy Numbers' column in 'Active Loan Tracking' tab.")
+                if p_idx is None:
+                    st.warning("Could not find 'Policy Number' column in 'Active Loan Tracking' tab.")
+                if status_idx is None:
+                    st.warning("Could not find 'Loan Status' column in 'Active Loan Tracking' tab.")
 
         status_box.write(f"Loaded **{len(loan_policies)}** active loan policies.")
 
