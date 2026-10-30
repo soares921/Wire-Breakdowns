@@ -54,6 +54,12 @@ if "user_token" not in st.session_state:
 if 'generated_files_data' not in st.session_state:
     st.session_state.generated_files_data = []
 
+if 'org_name' not in st.session_state:
+    st.session_state.org_name = ""
+
+if 'process_date' not in st.session_state:
+    st.session_state.process_date = ""    
+
 # gmail authentication gateway (login check)
 oauth2 = OAuth2Component(CLIENT_ID, CLIENT_SECRET, AUTHORIZE_URL, TOKEN_URL, REFRESH_TOKEN_URL, REVOKE_TOKEN_URL)
 
@@ -104,8 +110,8 @@ st.sidebar.title("Operations Panel")
 
 # section 1: required execution input
 st.sidebar.subheader("Processing Details")
-org_name = st.sidebar.text_input("Organization Name", placeholder="e.g. Ohio Health")
-process_date = st.sidebar.text_input("Process Date (MMDDYYYY)", max_chars=8, placeholder="")
+org_name = st.sidebar.text_input("Organization Name", placeholder="e.g. Ohio Health", key="org_name")
+process_date = st.sidebar.text_input("Process Date (MMDDYYYY)", max_chars=8, placeholder="", key="process_date")
 
 st.sidebar.divider()
 
@@ -149,6 +155,15 @@ if uploaded_file is not None:
     # read raw header preview
     df_raw = pd.read_excel(uploaded_file, sheet_name=selected_sheet)
     st.info(f"Loaded tab **'{selected_sheet}'** with **{len(df_raw)}** rows and **{len(df_raw.columns)}** columns.")
+
+else:
+    # if a file was uploaded and is now removed
+    if st.session_state.get('last_uploaded') is not None:
+        st.session_state.generated_files_data = []
+        st.session_state.last_uploaded = None
+        st.session_state.org_name = ""
+        st.session_state.process_date = ""
+        st.rerun()
 
 
     ### DYNAMIC COLUMN MAPPING
