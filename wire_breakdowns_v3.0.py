@@ -128,15 +128,25 @@ with st.sidebar.expander("How to Use Automation"):
     5. Download completed files from the bottom section.
     """)
 
-# link directly to your loan tracking/email directory sheet
+# link directly to the loan tracking/email directory sheet
 sheet_url = f"https://docs.google.com/spreadsheets/d/{LOAN_SPREADSHEET_ID}/edit"
 st.sidebar.link_button("Open Loan Tracking Sheet", sheet_url)
+
+def on_file_change():
+    # runs before any widgets are drawn when the uploader state changes
+    if st.session_state.get("invoice_file_uploader") is None:
+        st.session_state["org_name"] = ""
+        st.session_state["process_date"] = ""
+        st.session_state["generated_files_data"] = []
+        st.session_state["last_uploaded"] = None
 
 ### MAIN INTERFACE: FILE UPLOAD & SHEET SELECTOR
 st.subheader("Upload & Select Workbook Tab")
 uploaded_file = st.file_uploader(
     "Upload Invoice File", 
-    type=['xlsx', 'xls']
+    type=['xlsx', 'xls'],
+    key="invoice_file_uploader",
+    on_change=on_file_change
 )
 
 selected_sheet = None
@@ -164,7 +174,7 @@ if uploaded_file is not None:
     
     # precalculate best guessed column matches
     col_mapping = {}
-    col_cols = st.columns(4)
+    col_cols = st.columns(3)
     
     target_fields = ['Policy Number', 'Carrier', 'Total Cont']
     
@@ -182,15 +192,6 @@ if uploaded_file is not None:
             chosen = st.selectbox(f"Field: **{field}**", options, index=selected_index)
             if chosen != "-- Select Column --":
                 col_mapping[chosen] = field
-
-else:
-    # if a file was uploaded and is now removed
-    if st.session_state.get('last_uploaded') is not None:
-        st.session_state.generated_files_data = []
-        st.session_state.last_uploaded = None
-        st.session_state.org_name = ""
-        st.session_state.process_date = ""
-        st.rerun()
 
 def find_carrier_contact(carrier_name, directory):
     
