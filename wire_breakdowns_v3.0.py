@@ -156,16 +156,6 @@ if uploaded_file is not None:
     df_raw = pd.read_excel(uploaded_file, sheet_name=selected_sheet)
     st.info(f"Loaded tab **'{selected_sheet}'** with **{len(df_raw)}** rows and **{len(df_raw.columns)}** columns.")
 
-else:
-    # if a file was uploaded and is now removed
-    if st.session_state.get('last_uploaded') is not None:
-        st.session_state.generated_files_data = []
-        st.session_state.last_uploaded = None
-        st.session_state.org_name = ""
-        st.session_state.process_date = ""
-        st.rerun()
-
-
     ### DYNAMIC COLUMN MAPPING
     st.subheader("Confirm Column Mapping")
     st.caption("Match the columns from your Excel file to the required internal fields:")
@@ -192,6 +182,15 @@ else:
             chosen = st.selectbox(f"Field: **{field}**", options, index=selected_index)
             if chosen != "-- Select Column --":
                 col_mapping[chosen] = field
+
+else:
+    # if a file was uploaded and is now removed
+    if st.session_state.get('last_uploaded') is not None:
+        st.session_state.generated_files_data = []
+        st.session_state.last_uploaded = None
+        st.session_state.org_name = ""
+        st.session_state.process_date = ""
+        st.rerun()
 
 def find_carrier_contact(carrier_name, directory):
     
