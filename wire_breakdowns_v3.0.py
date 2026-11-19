@@ -3,10 +3,10 @@ from streamlit_oauth import OAuth2Component
 import pandas as pd
 import os
 import base64
+import tempfile
 from email.message import EmailMessage
 # google api libraries
 from google.oauth2.credentials import Credentials
-from google.auth.transport.requests import Request
 from googleapiclient.discovery import build
 # excel styling libraries
 from openpyxl import load_workbook
@@ -28,12 +28,10 @@ SCOPES = [
 
 LOAN_SPREADSHEET_ID = "1emRbKY0pOTgwnqwva5N7k0BLNN0e5AW3rn9XWPztTk4"
 
-
 DEFAULT_COLUMN_ALIASES = {
     'Total Cont': 'Total Cont', 'Total Contribution': 'Total Cont', 'Contribution': 'Total Cont', 'Amount': 'Total Cont',
     'Policy Number': 'Policy Number', 'Policy': 'Policy Number', 'Policy #': 'Policy Number',
     'Carrier': 'Carrier', 'Company': 'Carrier',
-    'Carrier Email': 'Carrier Email', 'Email': 'Carrier Email', 'Recipient Email': 'Carrier Email',
     'Premium Type': 'Premium Type', 'Status': 'Premium Type', 'Payment Type': 'Premium Type',
 }
 
@@ -45,7 +43,6 @@ REDIRECT_URI = st.secrets["google"]["redirect_uri"]
 
 AUTHORIZE_URL = "https://accounts.google.com/o/oauth2/v2/auth"
 TOKEN_URL = "https://oauth2.googleapis.com/token"
-REFRESH_TOKEN_URL = TOKEN_URL
 REVOKE_TOKEN_URL = "https://oauth2.googleapis.com/revoke"
 
 if "user_token" not in st.session_state:
@@ -61,7 +58,7 @@ if 'process_date' not in st.session_state:
     st.session_state.process_date = ""    
 
 # gmail authentication gateway (login check)
-oauth2 = OAuth2Component(CLIENT_ID, CLIENT_SECRET, AUTHORIZE_URL, TOKEN_URL, REFRESH_TOKEN_URL, REVOKE_TOKEN_URL)
+oauth2 = OAuth2Component(CLIENT_ID, CLIENT_SECRET, AUTHORIZE_URL, TOKEN_URL, REVOKE_TOKEN_URL)
 
 if not st.session_state.get("user_token"):
     st.info("Please log in with your Google account to generate Gmail drafts in your personal inbox.")
@@ -97,13 +94,46 @@ def get_user_credentials():
     return creds
 
 def get_user_gmail_service():
-    """Builds Gmail service for the currently logged-in user."""
+    # builds gmail service for the currently logged-in user
     return build('gmail', 'v1', credentials=get_user_credentials())
 
 def get_shared_sheets_service():
-    """Builds Google Sheets service using user's token."""
+    # builds Google Sheets service using user's token
     return build('sheets', 'v4', credentials=get_user_credentials())
 
+def find_carrier_contact(carrier_name, directory):
+    # looks up contact info for a carrier using exact matching first, then falls back to substring matching
+    clean_name = str(carrier_name).strip().lower()
+    
+    if clean_name in directory:
+        return directory[clean_name]
+    
+    for dir_carrier, contact_info in directory.items():
+        if dir_carrier in clean_name or clean_name in dir_carrier:
+            return contact_info
+            
+    # strip common suffix words as a final fallback
+    suffixes = [' life', ' insurance', ' co', ' company', ' group', ' (lsw)', ' financial']
+    stripped_name = clean_name
+    for suffix in suffixes:
+        stripped_name = stripped_name.replace(suffix, '').strip()
+        
+    for dir_carrier, contact_info in directory.items():
+        dir_clean = dir_carrier
+        for suffix in suffixes:
+            dir_clean = dir_clean.replace(suffix, '').strip()
+        if dir_clean and (dir_clean in stripped_name or stripped_name in dir_clean):
+            return contact_info
+            
+    return {}
+
+def on_file_change():
+    # runs before any widgets are drawn when the uploader state changes
+    if st.session_state.get("invoice_file_uploader") is None:
+        st.session_state["org_name"] = ""
+        st.session_state["process_date"] = ""
+        st.session_state["generated_files_data"] = []
+        st.session_state["last_uploaded"] = None
 
 ### SIDEBAR CONTROL PANEL
 st.sidebar.title("Operations Panel")
@@ -131,14 +161,6 @@ with st.sidebar.expander("How to Use Automation"):
 # link directly to the loan tracking/email directory sheet
 sheet_url = f"https://docs.google.com/spreadsheets/d/{LOAN_SPREADSHEET_ID}/edit"
 st.sidebar.link_button("Open Loan Tracking Sheet", sheet_url)
-
-def on_file_change():
-    # runs before any widgets are drawn when the uploader state changes
-    if st.session_state.get("invoice_file_uploader") is None:
-        st.session_state["org_name"] = ""
-        st.session_state["process_date"] = ""
-        st.session_state["generated_files_data"] = []
-        st.session_state["last_uploaded"] = None
 
 ### MAIN INTERFACE: FILE UPLOAD & SHEET SELECTOR
 st.subheader("Upload & Select Workbook Tab")
@@ -193,32 +215,6 @@ if uploaded_file is not None:
             if chosen != "-- Select Column --":
                 col_mapping[chosen] = field
 
-def find_carrier_contact(carrier_name, directory):
-    
-    # helper function that looks up contact info for a carrier using exact matching first, then falls back to substring matching
-    clean_name = str(carrier_name).strip().lower()
-    
-    if clean_name in directory:
-        return directory[clean_name]
-    
-    for dir_carrier, contact_info in directory.items():
-        if dir_carrier in clean_name or clean_name in dir_carrier:
-            return contact_info
-            
-    # strip common suffix words as a final fallback
-    suffixes = [' life', ' insurance', ' co', ' company', ' group', ' (lsw)', ' financial']
-    stripped_name = clean_name
-    for suffix in suffixes:
-        stripped_name = stripped_name.replace(suffix, '').strip()
-        
-    for dir_carrier, contact_info in directory.items():
-        dir_clean = dir_carrier
-        for suffix in suffixes:
-            dir_clean = dir_clean.replace(suffix, '').strip()
-        if dir_clean and (dir_clean in stripped_name or stripped_name in dir_clean):
-            return contact_info
-            
-    return {}
 
 st.divider()
 
@@ -227,7 +223,6 @@ st.subheader("Run Automation")
 
 if st.button("Process Invoice & Queue Gmail Drafts", type="primary"):
 
-    import tempfile
     # create a temporary directory on the cloud server to store breakdown workbooks
     temp_export_dir = tempfile.mkdtemp()
     
@@ -345,9 +340,6 @@ if st.button("Process Invoice & Queue Gmail Drafts", type="primary"):
         df = df.dropna(subset=['Carrier'])
         df['Policy Number'] = df['Policy Number'].astype(str).str.strip()
 
-        df = df.dropna(subset=['Carrier', 'Total Cont'])
-        df['Policy Number'] = df['Policy Number'].astype(str).str.strip()
-
         # premium type hierarchy logic
         def determine_premium_type(row):
             status_val = str(row.get('Premium Type', '')).strip().lower()
@@ -386,12 +378,6 @@ if st.button("Process Invoice & Queue Gmail Drafts", type="primary"):
             if "@" not in recipient_email or "." not in recipient_email:
                 st.warning(f"Skipped draft for **{carrier}**: No valid email found in uploaded sheet or Google Directory.")
                 continue
-
-            summary_row = pd.DataFrame([{'Policy Owner': 'TOTAL', 'Amount': total_amount}])
-            if 'Participant' in carrier_data.columns:
-                carrier_data = carrier_data.rename(columns={'Participant': 'Policy Owner'})
-            elif 'Policy Owner' not in carrier_data.columns:
-                carrier_data['Policy Owner'] = 'N/A'
 
             carrier_data = carrier_data.rename(columns={'Total Cont': 'Amount'})
 
