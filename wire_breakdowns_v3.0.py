@@ -379,6 +379,13 @@ if st.button("Process Invoice & Queue Gmail Drafts", type="primary"):
                 st.warning(f"Skipped draft for **{carrier}**: No valid email found in uploaded sheet or Google Directory.")
                 continue
 
+            carrier_data.columns = [str(c).strip() for c in carrier_data.columns]
+
+            if 'Participant' in carrier_data.columns:
+                carrier_data = carrier_data.rename(columns={'Participant': 'Policy Owner'})
+            elif 'Policy Owner' not in carrier_data.columns:
+                carrier_data['Policy Owner'] = 'N/A'
+
             carrier_data = carrier_data.rename(columns={'Total Cont': 'Amount'})
 
             # select columns & ensure column index is unique
